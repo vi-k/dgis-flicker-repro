@@ -88,6 +88,11 @@ class ControlsPanel extends StatelessWidget {
             onChanged: (v) => settings.eraseRoute = v,
           ),
           _Toggle(
+            label: 'Мигающий маршрут — раз в секунду',
+            value: settings.blinkRoute,
+            onChanged: (v) => settings.blinkRoute = v,
+          ),
+          _Toggle(
             label: 'Пересоздание линии раз в 20 с',
             value: settings.recreateRoute,
             onChanged: (v) => settings.recreateRoute = v,

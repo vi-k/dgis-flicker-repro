@@ -41,14 +41,22 @@ class ReproSettings extends ChangeNotifier {
   set animatedAppearance(bool value) =>
       _set(() => _animatedAppearance = value, rebuildObjects: true);
 
+  // Маркеров не касается: пересборка объектов сняла бы и добавила заодно
+  // машину, и её моргание списали бы на линию.
   bool _routeVisible = true;
   bool get routeVisible => _routeVisible;
-  set routeVisible(bool value) =>
-      _set(() => _routeVisible = value, rebuildObjects: true);
+  set routeVisible(bool value) => _set(() => _routeVisible = value);
 
   bool _eraseRoute = true;
   bool get eraseRoute => _eraseRoute;
   set eraseRoute(bool value) => _set(() => _eraseRoute = value);
+
+  /// Снимать и добавлять полилинию раз в секунду. Отдельно от
+  /// [recreateRoute]: там геометрия приходит заново, здесь объект просто
+  /// исчезает и появляется — и на слабом железе от этого теряет кадры маркер.
+  bool _blinkRoute = false;
+  bool get blinkRoute => _blinkRoute;
+  set blinkRoute(bool value) => _set(() => _blinkRoute = value);
 
   bool _recreateRoute = true;
   bool get recreateRoute => _recreateRoute;

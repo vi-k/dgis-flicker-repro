@@ -64,6 +64,9 @@ class ReproScene {
   /// Пересылка маршрута с новой геометрией — как в бою, раз в 20 с.
   static const _routeResendPeriod = Duration(seconds: 20);
 
+  /// Мигание полилинии — период снятия и добавления объекта.
+  static const _blinkPeriod = Duration(seconds: 1);
+
   /// `erasedPart` пишется не чаще десяти раз в секунду (боевой предел).
   static const _eraseInterval = Duration(milliseconds: 100);
 
@@ -77,6 +80,7 @@ class ReproScene {
   Timer? _eventTimer;
   Timer? _routeTimer;
   Timer? _statsTimer;
+  Timer? _blinkTimer;
 
   final _markers = <sdk.Marker>[];
   sdk.Polyline? _polyline;
@@ -118,6 +122,7 @@ class ReproScene {
     _eventTimer = Timer.periodic(_eventPeriod, (_) => _onDriverEvent());
     _routeTimer = Timer.periodic(_routeResendPeriod, (_) => _onRouteResend());
     _statsTimer = Timer.periodic(const Duration(seconds: 1), (_) => _flushStats());
+    _applyBlink();
     _onDriverEvent();
   }
 
@@ -128,6 +133,7 @@ class ReproScene {
     _eventTimer?.cancel();
     _routeTimer?.cancel();
     _statsTimer?.cancel();
+    _blinkTimer?.cancel();
     _removeMarkers();
     _removePolyline();
     stats.dispose();
@@ -138,9 +144,44 @@ class ReproScene {
         ? sdk.GraphicsPreset.lite
         : sdk.GraphicsPreset.normal;
     _restartTickTimer();
+    _applyBlink();
+    _applyRouteVisibility();
     if (settings.objectsRevision != _appliedObjectsRevision) {
       unawaited(_rebuildObjects());
     }
+  }
+
+  void _applyRouteVisibility() {
+    if (!settings.routeVisible) {
+      _removePolyline();
+      return;
+    }
+    // При включённом мигании линией распоряжается таймер.
+    if (_polyline == null && _blinkTimer == null) {
+      _rebuildRoute(fromMeters: _traveled);
+    }
+  }
+
+  void _applyBlink() {
+    final wanted = settings.blinkRoute && settings.routeVisible;
+    if (wanted == (_blinkTimer != null)) return;
+    if (!wanted) {
+      _blinkTimer?.cancel();
+      _blinkTimer = null;
+      // Выключили на снятой линии — вернуть её, иначе маршрут пропал молча.
+      if (settings.routeVisible && _polyline == null) {
+        _rebuildRoute(fromMeters: _traveled);
+      }
+      return;
+    }
+    _blinkTimer = Timer.periodic(_blinkPeriod, (_) {
+      if (_polyline == null) {
+        _rebuildRoute(fromMeters: _traveled);
+        _routeRecreates++;
+      } else {
+        _removePolyline();
+      }
+    });
   }
 
   void _restartTickTimer() {
@@ -296,15 +337,20 @@ class ReproScene {
     if (_track.length < 2) return;
     _segmentFrom = _traveled;
     _segmentTo = _traveled + _metersPerEvent;
+    var wrapped = false;
     if (_segmentTo >= _trackLength) {
       // Трасса кончилась — начинаем сначала и присылаем полную геометрию.
       _traveled = 0;
       _segmentFrom = 0;
       _segmentTo = _metersPerEvent;
       _rebuildRoute(fromMeters: 0);
+      wrapped = true;
     }
     _animationStartedAt = DateTime.now();
-    if (settings.followCamera) _moveCamera();
+    // На заворачивании камера обязана прыгнуть: машина переносится в начало
+    // мгновенно, и двухсекундный перелёт оставил бы её вне кадра — на записи
+    // это неотличимо от пропажи маркера.
+    if (settings.followCamera) _moveCamera(instant: wrapped);
   }
 
   void _onRouteResend() {
@@ -372,7 +418,7 @@ class ReproScene {
     _erasedWrites++;
   }
 
-  void _moveCamera() {
+  void _moveCamera({bool instant = false}) {
     final pose = poseAlong(_track, _segmentTo);
     unawaited(
       map.camera
@@ -383,7 +429,7 @@ class ReproScene {
               tilt: const sdk.Tilt(0),
               bearing: const sdk.Bearing(0),
             ),
-            _animationDuration,
+            instant ? Duration.zero : _animationDuration,
             sdk.CameraAnimationType.linear,
           )
           .value,
