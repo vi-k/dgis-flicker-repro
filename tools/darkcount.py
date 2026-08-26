@@ -76,6 +76,10 @@ def main():
                         help="доля кадра сверху, которую отрезать (HUD)")
     parser.add_argument("--bottom", type=float, default=0.70,
                         help="нижняя граница области карты, доля кадра (панель)")
+    parser.add_argument("--left", type=float, default=0.0,
+                        help="левая граница области, доля ширины кадра")
+    parser.add_argument("--right", type=float, default=1.0,
+                        help="правая граница области, доля ширины кадра")
     parser.add_argument("--dip", type=float, default=0.7,
                         help="провал ниже этой доли медианы считается пропажей")
     parser.add_argument("--quiet", action="store_true",
@@ -89,7 +93,9 @@ def main():
     width, height, duration = probe(args.video)
     top = int(height * args.top) // 2 * 2
     bottom = int(height * args.bottom) // 2 * 2
-    crop = (0, top, width // 2 * 2, max(2, bottom - top))
+    left = int(width * args.left) // 2 * 2
+    right = int(width * args.right) // 2 * 2
+    crop = (left, top, max(2, right - left), max(2, bottom - top))
 
     counts = []
     for frame in frames(args.video, crop, crop[2], crop[3]):

@@ -51,6 +51,15 @@ class ReproSettings extends ChangeNotifier {
   bool get eraseRoute => _eraseRoute;
   set eraseRoute(bool value) => _set(() => _eraseRoute = value);
 
+  /// Держать маркер и полилинию в одном [MapObjectManager] — состояние до
+  /// того, как машину вынесли в собственный менеджер. Разделение и есть обход,
+  /// которым симптом закрыли на своей стороне; без него дефект должен быть
+  /// виден.
+  bool _sharedObjectManager = false;
+  bool get sharedObjectManager => _sharedObjectManager;
+  set sharedObjectManager(bool value) =>
+      _set(() => _sharedObjectManager = value, rebuildObjects: true);
+
   /// Снимать и добавлять полилинию раз в секунду. Отдельно от
   /// [recreateRoute]: там геометрия приходит заново, здесь объект просто
   /// исчезает и появляется — и на слабом железе от этого теряет кадры маркер.

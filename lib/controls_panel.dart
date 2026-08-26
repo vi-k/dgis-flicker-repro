@@ -88,6 +88,11 @@ class ControlsPanel extends StatelessWidget {
             onChanged: (v) => settings.eraseRoute = v,
           ),
           _Toggle(
+            label: 'Маркер и линия в одном MapObjectManager',
+            value: settings.sharedObjectManager,
+            onChanged: (v) => settings.sharedObjectManager = v,
+          ),
+          _Toggle(
             label: 'Мигающий маршрут — раз в секунду',
             value: settings.blinkRoute,
             onChanged: (v) => settings.blinkRoute = v,

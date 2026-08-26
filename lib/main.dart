@@ -11,15 +11,21 @@ import 'route_data.dart';
 
 const _keyAsset = 'assets/dgissdk.key';
 
+/// Боевой стиль карты. Путь для SDK — без префикса `assets/`: File.fromAsset
+/// резолвит его относительно этого каталога, как и ключ.
+const _styleAsset = 'assets/map_style.2gis';
+const _styleSdkPath = 'map_style.2gis';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final hasKey = await _hasKey();
-  runApp(ReproApp(hasKey: hasKey));
+  final hasKey = await _hasAsset(_keyAsset);
+  final hasStyle = await _hasAsset(_styleAsset);
+  runApp(ReproApp(hasKey: hasKey, hasStyle: hasStyle));
 }
 
-Future<bool> _hasKey() async {
+Future<bool> _hasAsset(String path) async {
   try {
-    final data = await rootBundle.load(_keyAsset);
+    final data = await rootBundle.load(path);
     return data.lengthInBytes > 0;
   } catch (_) {
     return false;
@@ -27,16 +33,17 @@ Future<bool> _hasKey() async {
 }
 
 class ReproApp extends StatelessWidget {
-  const ReproApp({required this.hasKey, super.key});
+  const ReproApp({required this.hasKey, required this.hasStyle, super.key});
 
   final bool hasKey;
+  final bool hasStyle;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: '2GIS marker flicker repro',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(brightness: Brightness.light, useMaterial3: true),
-    home: hasKey ? const ReproScreen() : const _MissingKeyScreen(),
+    home: hasKey ? ReproScreen(hasStyle: hasStyle) : const _MissingKeyScreen(),
   );
 }
 
@@ -62,7 +69,11 @@ class _MissingKeyScreen extends StatelessWidget {
 }
 
 class ReproScreen extends StatefulWidget {
-  const ReproScreen({super.key});
+  const ReproScreen({required this.hasStyle, super.key});
+
+  /// Со стилем приложения карта тяжелее дефолтной темы SDK: больше слоёв и
+  /// подписей. Нет файла — берётся стиль SDK, и это видно на глаз.
+  final bool hasStyle;
 
   @override
   State<ReproScreen> createState() => _ReproScreenState();
@@ -121,6 +132,11 @@ class _ReproScreenState extends State<ReproScreen> {
                 appearance: sdk.UniversalAppearance(
                   const sdk.MapTheme.defaultDayTheme(),
                 ),
+                styleFuture: widget.hasStyle
+                    ? sdk.StyleBuilder(_sdkContext).loadStyle(
+                        sdk.File.fromAsset(_sdkContext, _styleSdkPath),
+                      )
+                    : null,
               ),
               controller: _mapController,
             ),

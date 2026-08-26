@@ -45,10 +45,15 @@ class ReproScene {
 
   final stats = ValueNotifier<ReproStats>(const ReproStats());
 
-  /// Машина живёт в отдельном менеджере от маршрута — так же, как в боевом
-  /// коде: пересоздание полилинии не должно задевать маркер.
+  /// Машина по умолчанию живёт в отдельном менеджере от маршрута — так же, как
+  /// в боевом коде. Ручка `sharedObjectManager` возвращает их в один: это
+  /// состояние до обхода, и проверяется именно оно.
   late final sdk.MapObjectManager _routeObjects = sdk.MapObjectManager(map);
   late final sdk.MapObjectManager _carObjects = sdk.MapObjectManager(map);
+
+  /// Менеджер, в который маркеры реально добавлены: снимать их нужно оттуда же,
+  /// иначе после переключения ручки они останутся на карте навсегда.
+  sdk.MapObjectManager? _markersManager;
   late final sdk.ImageLoader _loader = sdk.ImageLoader(context);
 
   /// Событие с новой точкой водителя. Медиана по логу поездки QA — 5.43 с.
@@ -266,16 +271,22 @@ class ReproScene {
         ),
       );
     }
+    final manager = settings.sharedObjectManager ? _routeObjects : _carObjects;
     for (final marker in _markers) {
-      _carObjects.addObject(marker);
+      manager.addObject(marker);
     }
+    _markersManager = manager;
   }
 
   void _removeMarkers() {
-    for (final marker in _markers) {
-      _carObjects.removeObject(marker);
+    final manager = _markersManager;
+    if (manager != null) {
+      for (final marker in _markers) {
+        manager.removeObject(marker);
+      }
     }
     _markers.clear();
+    _markersManager = null;
   }
 
   LatLng _ringPoint(LatLng center, int index, int total) {
