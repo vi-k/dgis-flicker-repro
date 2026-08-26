@@ -113,8 +113,8 @@ class WritesHud extends StatelessWidget {
           fontFamily: 'monospace',
         ),
         child: Text(
-          'pos ${s.positionWrites}/с · dir ${s.directionWrites}/с · '
-          'erase ${s.erasedWrites}/с · линия×${s.routeRecreates}',
+          'position ${s.positionWrites}/с · direction ${s.directionWrites}/с '
+          '(новых ${s.directionChanges}) · erasedPart ${s.erasedWrites}/с',
         ),
       ),
     ),

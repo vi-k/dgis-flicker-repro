@@ -90,3 +90,110 @@ double polylineLengthMeters(List<LatLng> points) {
     bearing: bearingDegrees(points[last - 1], points[last]),
   );
 }
+
+/// Индекс трассы с накопленными расстояниями: без него каждая выборка точки
+/// обходит ломаную с начала, а сглаживание курса требует их десятками на тик.
+class TrackIndex {
+  TrackIndex(this.points) : _cumulative = _buildCumulative(points);
+
+  final List<LatLng> points;
+  final List<double> _cumulative;
+
+  static List<double> _buildCumulative(List<LatLng> points) {
+    final result = <double>[0];
+    for (var i = 1; i < points.length; i++) {
+      result.add(result[i - 1] + haversineMeters(points[i - 1], points[i]));
+    }
+    return result;
+  }
+
+  double get lengthMeters => _cumulative.isEmpty ? 0 : _cumulative.last;
+
+  /// Номер отрезка, на который попадает отметка.
+  int segmentAt(double meters) {
+    var low = 0;
+    var high = _cumulative.length - 1;
+    while (low < high - 1) {
+      final middle = (low + high) ~/ 2;
+      if (_cumulative[middle] <= meters) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
+  LatLng pointAt(double meters) {
+    if (points.length < 2) return points.first;
+    final s = meters.clamp(0.0, lengthMeters);
+    final i = segmentAt(s);
+    final segment = _cumulative[i + 1] - _cumulative[i];
+    if (segment <= 0) return points[i];
+    return lerpPoint(points[i], points[i + 1], (s - _cumulative[i]) / segment);
+  }
+
+  double bearingAt(double meters) {
+    if (points.length < 2) return 0;
+    final i = segmentAt(meters.clamp(0.0, lengthMeters));
+    return bearingDegrees(points[i], points[i + 1]);
+  }
+
+  /// Центроид ломаной на участке — среднее по длине дуги. Для ломаной точен:
+  /// центроид отрезка равен его середине.
+  LatLng _centroid(double fromMeters, double toMeters) {
+    final start = fromMeters.clamp(0.0, lengthMeters);
+    final end = toMeters.clamp(0.0, lengthMeters);
+    if (end <= start) return pointAt(start);
+
+    var weight = 0.0;
+    var lat = 0.0;
+    var lon = 0.0;
+    var cursor = start;
+    var i = segmentAt(start);
+    while (cursor < end && i < points.length - 1) {
+      final segmentEnd = _cumulative[i + 1];
+      final pieceEnd = segmentEnd < end ? segmentEnd : end;
+      final piece = pieceEnd - cursor;
+      if (piece > 0) {
+        final middle = pointAt((cursor + pieceEnd) / 2);
+        lat += middle.lat * piece;
+        lon += middle.lon * piece;
+        weight += piece;
+      }
+      cursor = pieceEnd;
+      i++;
+    }
+    if (weight == 0) return pointAt(start);
+    return LatLng(lat / weight, lon / weight);
+  }
+
+  /// Точка ведущей кривой. Полуокно сжимается у концов трассы: несимметричное
+  /// обрезание сдвинуло бы старт вперёд на четверть окна.
+  LatLng guidePoint(double meters, double windowMeters) {
+    var half = windowMeters / 2;
+    if (meters < half) half = meters;
+    if (lengthMeters - meters < half) half = lengthMeters - meters;
+    if (half <= 0) return pointAt(meters);
+    return _centroid(meters - half, meters + half);
+  }
+
+  /// Поза на ведущей кривой: и точка, и курс меняются непрерывно. Курс по
+  /// касательной к отрезку держится постоянным на прямой и скачет на вершине —
+  /// а запись неизменного значения в маркер движок пропускает, и проверяемая
+  /// операция не выполняется вовсе.
+  ({LatLng point, double bearing}) smoothedPose(
+    double meters, {
+    double windowMeters = 24.0,
+    double deltaMeters = 1.0,
+  }) {
+    final s = meters.clamp(0.0, lengthMeters);
+    final point = guidePoint(s, windowMeters);
+    final back = guidePoint((s - deltaMeters).clamp(0.0, lengthMeters), windowMeters);
+    final ahead = guidePoint((s + deltaMeters).clamp(0.0, lengthMeters), windowMeters);
+    if (haversineMeters(back, ahead) < 0.01) {
+      return (point: point, bearing: bearingAt(s));
+    }
+    return (point: point, bearing: bearingDegrees(back, ahead));
+  }
+}

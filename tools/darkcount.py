@@ -45,17 +45,25 @@ def probe(path):
     return stream["width"], stream["height"], duration
 
 
-def frames(path, crop, width, height):
-    """Отдаёт кадры в градациях серого как bytes."""
+def frames(path, crop, width, height, color=False):
+    """Отдаёт кадры: в градациях серого либо в rgb24, если считаем по цвету."""
     x, y, w, h = crop
     out_h = max(2, round(WIDTH * h / w / 2) * 2)
+    fmt = "rgb24" if color else "gray"
     command = [
         "ffmpeg", "-v", "error", "-i", path,
-        "-vf", f"crop={w}:{h}:{x}:{y},scale={WIDTH}:{out_h},format=gray",
-        "-f", "rawvideo", "-pix_fmt", "gray", "-",
+        "-vf", f"crop={w}:{h}:{x}:{y},scale={WIDTH}:{out_h},format={fmt}",
+        # passthrough обязателен: без него ffmpeg приводит переменную частоту
+        # screenrecord к своей средней, дублируя и выбрасывая кадры, и номера
+        # в выводе перестают совпадать с номерами в файле (замер 26.08.2026).
+        "-fps_mode", "passthrough",
+        "-f", "rawvideo", "-pix_fmt", fmt, "-",
     ]
-    size = WIDTH * out_h
-    process = subprocess.Popen(command, stdout=subprocess.PIPE)
+    size = WIDTH * out_h * (3 if color else 1)
+    # rawvideo-муксер ругается на неубывающие dts у записи с переменной
+    # частотой; на данные это не влияет.
+    process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL)
     try:
         while True:
             chunk = process.stdout.read(size)
@@ -72,6 +80,11 @@ def main():
     parser.add_argument("video")
     parser.add_argument("--threshold", type=int, default=40,
                         help="яркость, ниже которой пиксель считается тёмным")
+    parser.add_argument("--color", default=None, metavar="RRGGBB",
+                        help="считать не тёмные пиксели, а близкие к этому "
+                             "цвету — например 00A025 для линии маршрута")
+    parser.add_argument("--tolerance", type=int, default=90,
+                        help="допуск по сумме модулей отклонений R+G+B")
     parser.add_argument("--top", type=float, default=0.12,
                         help="доля кадра сверху, которую отрезать (HUD)")
     parser.add_argument("--bottom", type=float, default=0.70,
@@ -98,8 +111,20 @@ def main():
     crop = (left, top, max(2, right - left), max(2, bottom - top))
 
     counts = []
-    for frame in frames(args.video, crop, crop[2], crop[3]):
-        counts.append(sum(1 for b in frame if b < args.threshold))
+    if args.color:
+        target = bytes.fromhex(args.color)
+        tr, tg, tb = target[0], target[1], target[2]
+        tol = args.tolerance
+        for frame in frames(args.video, crop, crop[2], crop[3], color=True):
+            hit = 0
+            for i in range(0, len(frame), 3):
+                if (abs(frame[i] - tr) + abs(frame[i + 1] - tg)
+                        + abs(frame[i + 2] - tb)) <= tol:
+                    hit += 1
+            counts.append(hit)
+    else:
+        for frame in frames(args.video, crop, crop[2], crop[3]):
+            counts.append(sum(1 for b in frame if b < args.threshold))
 
     if not counts:
         sys.exit("кадров не получено — проверьте путь и кодек")
@@ -107,7 +132,8 @@ def main():
     fps = len(counts) / duration if duration > 0 else 0.0
     median = statistics.median(counts)
     floor = median * args.dip
-    print(f"кадров {len(counts)}, {fps:.1f} fps, медиана тёмных пикселей "
+    what = f"пикселей цвета {args.color}" if args.color else "тёмных пикселей"
+    print(f"кадров {len(counts)}, {fps:.1f} fps, медиана {what} "
           f"{median:.0f}, порог провала {floor:.0f}")
 
     if not args.quiet:

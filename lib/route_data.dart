@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'geo.dart';
 
-/// Вершины маршрута из диагностики тикета (Алматы). Ровно те же, на которых
-/// симптом снимали в приложении.
-const routeVertices = <LatLng>[
+/// Вершины маршрута из диагностики тикета (Алматы) — те же, на которых симптом
+/// снимали в приложении.
+const _vertices = <LatLng>[
   LatLng(43.17356, 77.02523),
   LatLng(43.17190, 77.03551),
   LatLng(43.17064, 77.03812),
@@ -17,29 +17,25 @@ const routeVertices = <LatLng>[
 ];
 
 const _stepMeters = 20.0;
+const _amplitudeMeters = 25.0;
+const _periodMeters = 150.0;
 
-/// Боевая трасса: длинные прямые, курс между вершинами почти не меняется.
-final List<LatLng> straightTrack = densify(routeVertices, _stepMeters);
+/// Трасса-змейка поверх вершин из тикета: курс ходит примерно ±45°, поэтому за
+/// каждый тик направление меняется заметно. На прямой курс держится постоянным,
+/// а запись неизменного значения движок пропускает — тогда проверяемая операция
+/// не выполняется вовсе.
+final List<LatLng> track = _serpentine(densify(_vertices, _stepMeters));
 
-/// Змейка поверх той же трассы: курс ходит примерно ±45°, то есть за анимацию
-/// иконка доворачивается на десятки градусов — как в поездке QA.
-final List<LatLng> serpentineTrack = _serpentine(straightTrack);
-
-const _serpentineAmplitudeMeters = 25.0;
-const _serpentinePeriodMeters = 150.0;
-
-List<LatLng> _serpentine(List<LatLng> track) {
+List<LatLng> _serpentine(List<LatLng> base) {
   final result = <LatLng>[];
   var along = 0.0;
-  for (var i = 0; i < track.length; i++) {
-    if (i > 0) along += haversineMeters(track[i - 1], track[i]);
+  for (var i = 0; i < base.length; i++) {
+    if (i > 0) along += haversineMeters(base[i - 1], base[i]);
     final heading = i == 0
-        ? bearingDegrees(track[0], track[1])
-        : bearingDegrees(track[i - 1], track[i]);
-    final shift =
-        _serpentineAmplitudeMeters *
-        math.sin(2 * math.pi * along / _serpentinePeriodMeters);
-    result.add(_offset(track[i], shift, heading + 90.0));
+        ? bearingDegrees(base[0], base[1])
+        : bearingDegrees(base[i - 1], base[i]);
+    final shift = _amplitudeMeters * math.sin(2 * math.pi * along / _periodMeters);
+    result.add(_offset(base[i], shift, heading + 90.0));
   }
   return result;
 }
@@ -49,8 +45,7 @@ const _metersPerDegreeLat = 111320.0;
 LatLng _offset(LatLng point, double meters, double bearingDegrees) {
   final rad = bearingDegrees * math.pi / 180.0;
   final dLat = meters * math.cos(rad) / _metersPerDegreeLat;
-  final dLon =
-      meters *
+  final dLon = meters *
       math.sin(rad) /
       (_metersPerDegreeLat * math.cos(point.lat * math.pi / 180.0));
   return LatLng(point.lat + dLat, point.lon + dLon);
