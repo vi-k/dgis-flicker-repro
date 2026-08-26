@@ -69,7 +69,7 @@ class _FrameHudState extends State<FrameHud> {
 
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 52, 6),
       child: ValueListenableBuilder<ReproStats>(
         valueListenable: widget.stats,
         builder: (_, stats, _) => DefaultTextStyle(
@@ -103,7 +103,7 @@ class WritesHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     color: Colors.white,
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    padding: const EdgeInsets.fromLTRB(10, 6, 52, 6),
     child: ValueListenableBuilder<ReproStats>(
       valueListenable: stats,
       builder: (_, s, _) => DefaultTextStyle(
@@ -113,8 +113,8 @@ class WritesHud extends StatelessWidget {
           fontFamily: 'monospace',
         ),
         child: Text(
-          'position ${s.positionWrites}/с · direction ${s.directionWrites}/с '
-          '· erased ${s.erasedWrites}/с · маршрут пересоздан ${s.routeRecreates}',
+          'pos ${s.positionWrites}/с · dir ${s.directionWrites}/с · '
+          'erase ${s.erasedWrites}/с · линия×${s.routeRecreates}',
         ),
       ),
     ),

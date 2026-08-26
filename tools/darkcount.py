@@ -26,16 +26,23 @@ WIDTH = 320  # та же грубость, что у проверенного п
 
 
 def probe(path):
+    """Размер кадра и длительность.
+
+    Частоту у записи экрана спрашивать бесполезно: screenrecord пишет с
+    переменной частотой, и `avg_frame_rate` расходится с реальностью втрое
+    (замер 26.08.2026: 23.7 против фактических 60.5). Поэтому время считается
+    от длительности контейнера, поделённой на число декодированных кадров.
+    """
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width,height,avg_frame_rate",
+         "-show_entries", "stream=width,height:format=duration",
          "-of", "json", path],
         capture_output=True, text=True, check=True,
     )
-    stream = json.loads(out.stdout)["streams"][0]
-    num, _, den = stream["avg_frame_rate"].partition("/")
-    fps = float(num) / float(den or 1)
-    return stream["width"], stream["height"], fps
+    parsed = json.loads(out.stdout)
+    stream = parsed["streams"][0]
+    duration = float(parsed.get("format", {}).get("duration") or 0)
+    return stream["width"], stream["height"], duration
 
 
 def frames(path, crop, width, height):
@@ -79,7 +86,7 @@ def main():
         if shutil.which(tool) is None:
             sys.exit(f"нужен {tool} в PATH")
 
-    width, height, fps = probe(args.video)
+    width, height, duration = probe(args.video)
     top = int(height * args.top) // 2 * 2
     bottom = int(height * args.bottom) // 2 * 2
     crop = (0, top, width // 2 * 2, max(2, bottom - top))
@@ -91,6 +98,7 @@ def main():
     if not counts:
         sys.exit("кадров не получено — проверьте путь и кодек")
 
+    fps = len(counts) / duration if duration > 0 else 0.0
     median = statistics.median(counts)
     floor = median * args.dip
     print(f"кадров {len(counts)}, {fps:.1f} fps, медиана тёмных пикселей "

@@ -153,7 +153,28 @@ class ReproScene {
 
   Duration? _tickPeriod;
 
+  bool _rebuildInFlight = false;
+  bool _rebuildRequested = false;
+
+  /// Пересборка ждёт растеризации иконки, а ручки за это время могут щёлкнуть
+  /// ещё раз: без этого две пересборки наложились бы и маркеры удвоились.
   Future<void> _rebuildObjects() async {
+    if (_rebuildInFlight) {
+      _rebuildRequested = true;
+      return;
+    }
+    _rebuildInFlight = true;
+    try {
+      do {
+        _rebuildRequested = false;
+        await _rebuildObjectsOnce();
+      } while (_rebuildRequested && !_disposed);
+    } finally {
+      _rebuildInFlight = false;
+    }
+  }
+
+  Future<void> _rebuildObjectsOnce() async {
     _appliedObjectsRevision = settings.objectsRevision;
     final track = settings.track == TrackKind.straight
         ? straightTrack

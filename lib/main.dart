@@ -71,9 +71,8 @@ class ReproScreen extends StatefulWidget {
 class _ReproScreenState extends State<ReproScreen> {
   final _settings = ReproSettings();
   final _mapController = sdk.MapWidgetController();
-  late final sdk.Context _sdkContext = sdk.DGis.initialize(
-    keySource: sdk.KeySource.fromAsset(sdk.KeyFromAsset(_keyAsset)),
-  );
+  // Ключ берётся по умолчанию — из assets/dgissdk.key, как в примере SDK.
+  late final sdk.Context _sdkContext = sdk.DGis.initialize();
 
   ReproScene? _scene;
   bool _chromeVisible = true;
@@ -127,6 +126,7 @@ class _ReproScreenState extends State<ReproScreen> {
             ),
             if (scene != null && _chromeVisible)
               Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   FrameHud(stats: scene.stats),
                   WritesHud(stats: scene.stats),

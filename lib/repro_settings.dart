@@ -79,7 +79,10 @@ class ReproSettings extends ChangeNotifier {
   bool get liteGraphics => _liteGraphics;
   set liteGraphics(bool value) => _set(() => _liteGraphics = value);
 
-  bool _followCamera = false;
+  // По умолчанию включена: без неё машина уходит за край экрана за полминуты,
+  // и записывать нечего. В поездке QA камера была отключена — тумблер даёт то
+  // же условие.
+  bool _followCamera = true;
   bool get followCamera => _followCamera;
   set followCamera(bool value) => _set(() => _followCamera = value);
 

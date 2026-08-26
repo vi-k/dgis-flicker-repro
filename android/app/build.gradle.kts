@@ -15,8 +15,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "kz.teztaxi.dgis_flicker_repro"
+        // Ключ 2GIS привязан к идентификатору приложения. Если ваш ключ выдан
+        // на другой — соберите с REPRO_APP_ID=<ваш идентификатор>.
+        applicationId = System.getenv("REPRO_APP_ID") ?: "kz.teztaxi.dgis_flicker_repro"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

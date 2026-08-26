@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Нативная часть 2GIS Mobile SDK лежит только здесь.
+        maven { url = uri("https://artifactory.2gis.dev/sdk-maven-release") }
     }
 }
 
