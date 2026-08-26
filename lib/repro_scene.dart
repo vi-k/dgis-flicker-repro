@@ -68,6 +68,10 @@ class ReproScene {
   Timer? _tickTimer;
   Timer? _eventTimer;
   Timer? _statsTimer;
+  Timer? _directionTimer;
+  Timer? _erasedTimer;
+  WriteRate? _directionRate;
+  WriteRate? _erasedRate;
 
   sdk.Marker? _marker;
   sdk.Polyline? _polyline;
@@ -81,8 +85,6 @@ class ReproScene {
   double _segmentTo = 0;
   DateTime? _animationStartedAt;
 
-  DateTime? _lastDirectionWriteAt;
-  DateTime? _lastErasedWriteAt;
   double? _lastWrittenBearing;
 
   int _positionWrites = 0;
@@ -96,6 +98,8 @@ class ReproScene {
     await _addMarker();
     if (_disposed) return;
     _rebuildRoute(fromMeters: 0);
+    settings.addListener(_restartWriteTimers);
+    _restartWriteTimers();
     _tickTimer = Timer.periodic(_tick, (_) => _onTick());
     _eventTimer = Timer.periodic(_eventPeriod, (_) => _onDriverEvent());
     _statsTimer = Timer.periodic(
@@ -107,6 +111,9 @@ class ReproScene {
 
   void dispose() {
     _disposed = true;
+    settings.removeListener(_restartWriteTimers);
+    _directionTimer?.cancel();
+    _erasedTimer?.cancel();
     _tickTimer?.cancel();
     _eventTimer?.cancel();
     _statsTimer?.cancel();
@@ -206,22 +213,40 @@ class ReproScene {
 
     marker.position = _withElevation(pose.point);
     _positionWrites++;
-    _writeDirection(marker, pose.bearing);
-    _writeErasedPart(along);
 
     if (t >= 1.0) _animationStartedAt = null;
   }
 
+  /// Таймеры записей живут отдельно от тика сцены, чтобы частота была ровно
+  /// такой, какая выбрана ручкой.
+  void _restartWriteTimers() {
+    if (settings.direction != _directionRate) {
+      _directionRate = settings.direction;
+      _directionTimer?.cancel();
+      final period = settings.direction.period;
+      _directionTimer = period == null
+          ? null
+          : Timer.periodic(period, (_) => _writeDirection());
+    }
+    if (settings.erased != _erasedRate) {
+      _erasedRate = settings.erased;
+      _erasedTimer?.cancel();
+      final period = settings.erased.period;
+      _erasedTimer = period == null
+          ? null
+          : Timer.periodic(period, (_) => _writeErasedPart());
+    }
+  }
+
   /// Порогов по величине изменения здесь нет намеренно: каждая запись несёт
   /// новое значение, иначе движок её пропустит и проверяемая операция не
-  /// выполнится.
-  void _writeDirection(sdk.Marker marker, double bearing) {
-    final interval = settings.direction.interval;
-    if (interval == null) return;
-    final now = DateTime.now();
-    final last = _lastDirectionWriteAt;
-    if (last != null && now.difference(last) < interval) return;
-    _lastDirectionWriteAt = now;
+  /// выполнится. Между событиями машина стоит и значение не меняется — тогда
+  /// не пишем вовсе, иначе счётчик показывал бы записи, которых движок не
+  /// видит.
+  void _writeDirection() {
+    final marker = _marker;
+    if (marker == null || _animationStartedAt == null) return;
+    final bearing = _index.smoothedPose(_traveled).bearing;
 
     final previous = _lastWrittenBearing;
     if (previous == null || (bearing - previous).abs() > 0.001) {
@@ -232,18 +257,15 @@ class ReproScene {
     _directionWrites++;
   }
 
-  void _writeErasedPart(double along) {
+  void _writeErasedPart() {
     final polyline = _polyline;
-    if (polyline == null || _routeLengthMeters <= 0) return;
-    final interval = settings.erased.interval;
-    if (interval == null) return;
-    final now = DateTime.now();
-    final last = _lastErasedWriteAt;
-    if (last != null && now.difference(last) < interval) return;
-    _lastErasedWriteAt = now;
-
+    if (polyline == null ||
+        _routeLengthMeters <= 0 ||
+        _animationStartedAt == null) {
+      return;
+    }
     polyline.erasedPart =
-        ((along - _routeOffsetMeters) / _routeLengthMeters).clamp(0.0, 1.0);
+        ((_traveled - _routeOffsetMeters) / _routeLengthMeters).clamp(0.0, 1.0);
     _erasedWrites++;
   }
 
