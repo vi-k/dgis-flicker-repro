@@ -81,6 +81,12 @@ class _ReproScreenState extends State<ReproScreen> {
         zoom: const sdk.Zoom(16),
       ),
       graphicsPreset: sdk.GraphicsPreset.lite,
+      // Светлая тема принудительно: на ней машина остаётся единственным
+      // крупным тёмным объектом, по которому кадры считает
+      // tools/darkcount.py. В 14.0.0 UniversalAppearance убран, тему
+      // закрепляет mapAppearance — иначе она поехала бы за системной
+      // настройкой устройства.
+      mapAppearance: sdk.MapAppearance.fixed(sdk.Fixed(sdk.MapTheme.defaultTheme)),
     ),
   );
   // Ключ берётся по умолчанию — из assets/dgissdk.key, как в примере SDK.
