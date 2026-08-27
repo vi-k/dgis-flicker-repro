@@ -22,7 +22,7 @@ import statistics
 import subprocess
 import sys
 
-WIDTH = 320  # та же грубость, что у проверенного прогона
+WIDTH = 320  # грубость по умолчанию; тонкие объекты требуют больше, см. --width
 
 
 def probe(path):
@@ -45,21 +45,21 @@ def probe(path):
     return stream["width"], stream["height"], duration
 
 
-def frames(path, crop, width, height, color=False):
+def frames(path, crop, width, height, color=False, out_w=WIDTH):
     """Отдаёт кадры: в градациях серого либо в rgb24, если считаем по цвету."""
     x, y, w, h = crop
-    out_h = max(2, round(WIDTH * h / w / 2) * 2)
+    out_h = max(2, round(out_w * h / w / 2) * 2)
     fmt = "rgb24" if color else "gray"
     command = [
         "ffmpeg", "-v", "error", "-i", path,
-        "-vf", f"crop={w}:{h}:{x}:{y},scale={WIDTH}:{out_h},format={fmt}",
+        "-vf", f"crop={w}:{h}:{x}:{y},scale={out_w}:{out_h},format={fmt}",
         # passthrough обязателен: без него ffmpeg приводит переменную частоту
         # screenrecord к своей средней, дублируя и выбрасывая кадры, и номера
         # в выводе перестают совпадать с номерами в файле (замер 26.08.2026).
         "-fps_mode", "passthrough",
         "-f", "rawvideo", "-pix_fmt", fmt, "-",
     ]
-    size = WIDTH * out_h * (3 if color else 1)
+    size = out_w * out_h * (3 if color else 1)
     # rawvideo-муксер ругается на неубывающие dts у записи с переменной
     # частотой; на данные это не влияет.
     process = subprocess.Popen(command, stdout=subprocess.PIPE,
@@ -95,6 +95,18 @@ def main():
                         help="правая граница области, доля ширины кадра")
     parser.add_argument("--dip", type=float, default=0.7,
                         help="провал ниже этой доли медианы считается пропажей")
+    parser.add_argument("--window", type=float, default=0.0,
+                        help="базовый уровень считать по скользящему окну "
+                             "такой длины в секундах вместо медианы всего "
+                             "прогона. Нужно для убывающих рядов: erasedPart "
+                             "постепенно съедает полилинию, её сигнал падает "
+                             "по ходу прогона, и глобальная медиана метит "
+                             "провалом половину записи")
+    parser.add_argument("--width", type=int, default=WIDTH,
+                        help="ширина кадра при разборе; по умолчанию 320. "
+                             "Тонкие объекты вроде полилинии на 320 теряются: "
+                             "линия толщиной 4 логических пикселя после сжатия "
+                             "уходит в доли пикселя, сигнал тонет в шуме")
     parser.add_argument("--quiet", action="store_true",
                         help="печатать только провалы")
     args = parser.parse_args()
@@ -115,7 +127,8 @@ def main():
         target = bytes.fromhex(args.color)
         tr, tg, tb = target[0], target[1], target[2]
         tol = args.tolerance
-        for frame in frames(args.video, crop, crop[2], crop[3], color=True):
+        for frame in frames(args.video, crop, crop[2], crop[3], color=True,
+                            out_w=args.width):
             hit = 0
             for i in range(0, len(frame), 3):
                 if (abs(frame[i] - tr) + abs(frame[i + 1] - tg)
@@ -123,7 +136,8 @@ def main():
                     hit += 1
             counts.append(hit)
     else:
-        for frame in frames(args.video, crop, crop[2], crop[3]):
+        for frame in frames(args.video, crop, crop[2], crop[3],
+                            out_w=args.width):
             counts.append(sum(1 for b in frame if b < args.threshold))
 
     if not counts:
@@ -131,18 +145,31 @@ def main():
 
     fps = len(counts) / duration if duration > 0 else 0.0
     median = statistics.median(counts)
-    floor = median * args.dip
     what = f"пикселей цвета {args.color}" if args.color else "тёмных пикселей"
-    print(f"кадров {len(counts)}, {fps:.1f} fps, медиана {what} "
-          f"{median:.0f}, порог провала {floor:.0f}")
+
+    if args.window > 0 and fps > 0:
+        half = max(1, int(args.window * fps / 2))
+        base = []
+        for i in range(len(counts)):
+            lo, hi = max(0, i - half), min(len(counts), i + half + 1)
+            base.append(statistics.median(counts[lo:hi]))
+        floors = [b * args.dip for b in base]
+        print(f"кадров {len(counts)}, {fps:.1f} fps, медиана {what} "
+              f"{median:.0f}, базовый уровень — скользящее окно "
+              f"{args.window:g} с")
+    else:
+        floors = [median * args.dip] * len(counts)
+        print(f"кадров {len(counts)}, {fps:.1f} fps, медиана {what} "
+              f"{median:.0f}, порог провала {median * args.dip:.0f}")
 
     if not args.quiet:
         for i, value in enumerate(counts):
-            mark = "  <-- провал" if value < floor else ""
+            mark = "  <-- провал" if value < floors[i] else ""
             print(f"{i:5d}  t={i / fps:6.2f}s  {value:6d}{mark}")
 
     dips, start = [], None
     for i, value in enumerate(counts):
+        floor = floors[i]
         if value < floor and start is None:
             start = i
         elif value >= floor and start is not None:
