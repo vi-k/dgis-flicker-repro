@@ -79,9 +79,11 @@
 
 ## Как воспроизвести
 
-Приложение целиком: https://github.com/vi-k/dgis-flicker-repro Кроме `dgis_mobile_sdk_full` в нём
-нет зависимостей — ни своих обёрток над картой, ни сети, ни бэкенда. Ключ SDK не
-входит в репозиторий, положите свой в `assets/dgissdk.key`.
+Приложение целиком: https://github.com/vi-k/dgis-flicker-repro
+
+Кроме `dgis_mobile_sdk_full` в нём нет зависимостей — ни своих обёрток над
+картой, ни сети, ни бэкенда. Ключ SDK в репозиторий не входит, положите свой в
+`assets/dgissdk.key`.
 
 ```bash
 flutter pub get
