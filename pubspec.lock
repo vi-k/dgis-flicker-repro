@@ -53,10 +53,10 @@ packages:
     dependency: "direct main"
     description:
       name: dgis_mobile_sdk_full
-      sha256: a395e9d2b4bf872761eae6b94fcff0ceb29b66908ac93c619d389b6bcee0738f
+      sha256: f3f5231ac32e2e511dd0600cb17452d1686775703491f531e6e929b261f75411
       url: "https://pub.dev"
     source: hosted
-    version: "13.7.0"
+    version: "14.0.0"
   fake_async:
     dependency: transitive
     description:

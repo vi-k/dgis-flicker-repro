@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dgis_mobile_sdk_full/dgis.dart' as sdk;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -71,7 +73,16 @@ class ReproScreen extends StatefulWidget {
 
 class _ReproScreenState extends State<ReproScreen> {
   final _settings = ReproSettings();
-  final _mapController = sdk.MapWidgetController();
+  late final sdk.MapWidgetController _mapController = sdk.MapWidgetController(
+    _sdkContext,
+    controllerOptions: sdk.MapControllerOptions(
+      position: sdk.CameraPosition(
+        point: _toSdkPoint(track.first),
+        zoom: const sdk.Zoom(16),
+      ),
+      graphicsPreset: sdk.GraphicsPreset.lite,
+    ),
+  );
   // Ключ берётся по умолчанию — из assets/dgissdk.key, как в примере SDK.
   late final sdk.Context _sdkContext = sdk.DGis.initialize();
 
@@ -81,18 +92,23 @@ class _ReproScreenState extends State<ReproScreen> {
   @override
   void initState() {
     super.initState();
-    _mapController.getMapAsync((map) {
-      if (!mounted) return;
-      final scene = ReproScene(
-        context: _sdkContext,
-        map: map,
-        settings: _settings,
-        devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
-      );
-      _scene = scene;
-      scene.start();
-      setState(() {});
-    });
+    unawaited(_attachScene());
+  }
+
+  /// В 14.0.0 карта берётся через isReady/map: колбэка getMapAsync больше нет.
+  Future<void> _attachScene() async {
+    await _mapController.isReady;
+    final map = _mapController.map;
+    if (!mounted || map == null) return;
+    final scene = ReproScene(
+      context: _sdkContext,
+      map: map,
+      settings: _settings,
+      devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
+    );
+    _scene = scene;
+    unawaited(scene.start());
+    setState(() {});
   }
 
   @override
@@ -111,18 +127,6 @@ class _ReproScreenState extends State<ReproScreen> {
           children: [
             sdk.MapWidget(
               sdkContext: _sdkContext,
-              mapOptions: sdk.MapOptions(
-                position: sdk.CameraPosition(
-                  point: _toSdkPoint(track.first),
-                  zoom: const sdk.Zoom(16),
-                ),
-                // Светлая тема принудительно: на ней машина остаётся
-                // единственным крупным тёмным объектом, по которому кадры
-                // считает tools/darkcount.py.
-                appearance: sdk.UniversalAppearance(
-                  const sdk.MapTheme.defaultDayTheme(),
-                ),
-              ),
               controller: _mapController,
             ),
             if (scene != null && _chromeVisible)
